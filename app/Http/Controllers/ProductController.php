@@ -30,7 +30,7 @@ class ProductController extends Controller
 
         try {
 
-            $path = $request->file('image')->storePublicly(
+            $path = $request->file('image')->store(
                 'products',
                 's3'
             );
