@@ -28,12 +28,19 @@ class ProductController extends Controller
             'image' => 'required|image|max:2048'
         ]);
 
-        $path = $request->file('image')->store(
-            'products',
-            's3'
-        );
+        try {
 
-        $product = Product::create([
+            $path = $request->file('image')->store(
+                'products',
+                's3'
+            );
+
+        } catch (\Exception $e) {
+
+            dd($e->getMessage());
+        }
+
+        Product::create([
             'name' => $request->name,
             'description' => $request->description,
             'image' => $path
