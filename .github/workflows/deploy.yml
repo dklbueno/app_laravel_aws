@@ -1,0 +1,71 @@
+name: Laravel CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+
+  test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.3
+
+      - name: Install Composer
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Copy env
+        run: cp .env.example .env
+
+      - name: Generate Key
+        run: php artisan key:generate
+
+      - name: Run Tests
+        run: php artisan test
+
+  deploy:
+
+    needs: test
+
+    runs-on: ubuntu-latest
+
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+
+      - name: Deploy
+        uses: appleboy/ssh-action@v1
+
+        with:
+
+          host: ${{ secrets.SERVER_HOST }}
+
+          username: ${{ secrets.SERVER_USER }}
+
+          key: ${{ secrets.SERVER_SSH_KEY }}
+
+          script: |
+
+            cd /var/www/meu-projeto
+
+            git pull origin main
+
+            composer install --no-dev --optimize-autoloader
+
+            php artisan migrate --force
+
+            php artisan optimize
+
+            sudo systemctl restart nginx
+
+            sudo systemctl restart php8.3-fpm
