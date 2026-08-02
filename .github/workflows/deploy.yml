@@ -2,19 +2,18 @@ name: Laravel CI/CD
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
   pull_request:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
-
   test:
-
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -54,3 +53,44 @@ jobs:
       - name: Stop containers
         if: always()
         run: docker compose down
+
+  deploy:
+    needs: test
+
+    if: github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.0
+
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+
+          script: |
+            set -e
+
+            cd /var/www/html/app_laravel_aws
+
+            echo "Atualizando código..."
+            git pull origin main
+
+            echo "Subindo containers..."
+            docker compose up -d --build
+
+            echo "Instalando dependências..."
+            docker compose exec -T app composer install --no-dev --optimize-autoloader
+
+            echo "Executando migrations..."
+            docker compose exec -T app php artisan migrate --force
+
+            echo "Otimizando Laravel..."
+            docker compose exec -T app php artisan optimize
+
+            echo "Deploy concluído com sucesso!"
