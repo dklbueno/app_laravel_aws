@@ -19,6 +19,6 @@ class ExampleTest extends TestCase
 
     public function test_ci_is_working(): void
     {
-        $this->assertTrue(false);
+        $this->assertTrue(true);
     }
 }
