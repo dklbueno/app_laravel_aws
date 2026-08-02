@@ -2,8 +2,10 @@ name: Laravel CI/CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+
+  pull_request:
+    branches: [main]
 
 jobs:
 
@@ -16,56 +18,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: 8.3
+      - name: Build containers
+        run: docker compose build
 
-      - name: Install Composer
-        run: composer install --no-interaction --prefer-dist
+      - name: Start containers
+        run: docker compose up -d
 
-      - name: Copy env
-        run: cp .env.example .env
+      - name: Wait MySQL
+        run: |
+          until docker compose exec -T mysql mysqladmin ping -uroot -proot --silent; do
+            echo "Waiting MySQL..."
+            sleep 2
+          done
 
-      - name: Generate Key
-        run: php artisan key:generate
+      - name: Install dependencies
+        run: docker compose exec -T app composer install --no-interaction --prefer-dist
 
-      - name: Run Tests
-        run: php artisan test
+      - name: Create .env
+        run: |
+          docker compose exec -T app sh -c '
+            if [ ! -f .env ]; then
+              cp .env.example .env
+            fi
+          '
 
-  deploy:
+      - name: Generate APP_KEY
+        run: docker compose exec -T app php artisan key:generate
 
-    needs: test
+      - name: Run migrations
+        run: docker compose exec -T app php artisan migrate --force
 
-    runs-on: ubuntu-latest
+      - name: Run tests
+        run: docker compose exec -T app php artisan test
 
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-
-      - name: Deploy
-        uses: appleboy/ssh-action@v1
-
-        with:
-
-          host: ${{ secrets.SERVER_HOST }}
-
-          username: ${{ secrets.SERVER_USER }}
-
-          key: ${{ secrets.SERVER_SSH_KEY }}
-
-          script: |
-
-            cd /var/www/meu-projeto
-
-            git pull origin main
-
-            composer install --no-dev --optimize-autoloader
-
-            php artisan migrate --force
-
-            php artisan optimize
-
-            sudo systemctl restart nginx
-
-            sudo systemctl restart php8.3-fpm
+      - name: Stop containers
+        if: always()
+        run: docker compose down
